@@ -1,0 +1,21 @@
+llm:
+  # DigitalOcean Inference — OpenAI-compatible endpoint
+  # Available models: https://inference.do-ai.run/v1/models
+  # Swap model: to any DO-hosted model for the model-size sweep experiment
+  model: openai-gpt-oss-120b        # fallback if LLM_MODEL env var is not set
+  api_base: https://inference.do-ai.run/v1
+  api_key_env: DIGITALOCEAN_TOKEN               # set in .env
+  max_tokens: 2048
+
+  # --- Swap model for the size-sweep experiment (change LLM_MODEL in .env) ---
+  # meta-llama/Meta-Llama-3.1-8B-Instruct
+  # meta-llama/Meta-Llama-3.3-70B-Instruct
+  # mistral-7b-instruct
+  #
+  # Ollama local (add ollama container to compose, point api_base to it):
+  #   api_base: http://ollama:11434/v1
+  #   api_key_env: ""   # Ollama needs no key
+
+run:
+  log_dir: /runs
+  max_hosts: 3   # sprint 6: seed + fileserver + webapp (M-09)

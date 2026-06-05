@@ -1,0 +1,10 @@
+# API keys — never commit
+.env
+
+# Run trace logs (large, generated)
+runs/*/
+!runs/.gitkeep
+
+# Python
+__pycache__/
+*.pyc

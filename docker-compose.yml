@@ -1,0 +1,76 @@
+name: agentworm
+
+networks:
+  lab:
+    # Internal-only: all hosts on flat lab subnet (NFR-SAF-01)
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  mgmt:
+    # Non-internal: researcher's machine → C2 port mapping (OrbStack/Docker Desktop)
+    driver: bridge
+
+services:
+  c2:
+    build: ./c2
+    container_name: agentworm-c2
+    networks:
+      lab:
+        ipv4_address: 172.20.0.2
+      mgmt: {}
+    ports:
+      - "8000:8000"
+    environment:
+      DIGITALOCEAN_TOKEN: ${DIGITALOCEAN_TOKEN}
+      LLM_MODEL: ${LLM_MODEL}
+    volumes:
+      - ./configs:/configs:ro
+      - ./runs:/runs
+      - ./dba/agent.py:/app/dba.py:ro    # served at GET /dba for web-injection delivery
+      - ./c2/skills:/app/skills:ro       # hot-reload skills without image rebuild
+    restart: unless-stopped
+
+  # ── Seed host: starts DBA automatically ──────────────────────────────────────
+  host01:
+    build: ./dba
+    container_name: agentworm-host01
+    hostname: workstation-01
+    networks:
+      lab:
+        ipv4_address: 172.20.0.11
+    environment:
+      C2_HOST: "172.20.0.2"
+      BEACON_INTERVAL: "5"
+      DBA_USER: "alice"
+      SSH_PASS: "lab-shared-pass"
+      CRED_LOCATION: "env"
+    depends_on:
+      - c2
+    restart: unless-stopped
+
+  # ── Hop 1 target: SSH with extracted credentials (CWE-798) ───────────────────
+  host02:
+    build: ./dba
+    container_name: agentworm-host02
+    hostname: fileserver-02
+    networks:
+      lab:
+        ipv4_address: 172.20.0.12
+    environment:
+      DBA_USER: "bob"
+      SSH_PASS: "lab-shared-pass"
+      CRED_LOCATION: "config_file"
+      TARGET_ONLY: "true"
+    restart: unless-stopped
+
+  # ── Hop 2 target: web service command injection (CWE-78) ─────────────────────
+  host03:
+    build: ./hosts/webapp
+    container_name: agentworm-host03
+    hostname: webapp-03
+    networks:
+      lab:
+        ipv4_address: 172.20.0.13
+    restart: unless-stopped

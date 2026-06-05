@@ -1,0 +1,47 @@
+network:
+  name: agentworm_lab
+  subnet: 172.20.0.0/24
+  internal: true
+
+c2:
+  ip: 172.20.0.2
+  port: 8000
+
+hosts:
+  - id: host01
+    role: seed
+    ip: 172.20.0.11
+    hostname: workstation-01
+    user: alice
+    entry_vector: pre-infected
+    credential_location: env
+
+  - id: host02
+    role: fileserver
+    ip: 172.20.0.12
+    hostname: fileserver-02
+    user: bob
+    entry_vector: ssh_password        # CWE-798 — credential from host01 env
+    credential_location: config_file
+
+  - id: host03
+    role: webapp
+    ip: 172.20.0.13
+    hostname: webapp-03
+    user: www-data                    # DBA lands as www-data via command injection
+    entry_vector: web_command_injection  # CWE-78 — /api/health?check= endpoint
+    service_port: 5000
+    ssh_auth: key_only                # no SSH password — forces web exploitation path
+    sprint: 6
+
+  # Sprint 7 (planned)
+  # - id: host04
+  #   role: devbox
+  #   ip: 172.20.0.14
+  #   entry_vector: privesc_ssh_key    # CWE-269 — sudo python3 NOPASSWD → extract root key
+
+  # Sprint 8 (planned)
+  # - id: host05
+  #   role: ciserver
+  #   ip: 172.20.0.15
+  #   entry_vector: git_supply_chain   # CWE-829 — npm predeploy hook injected into git repo
