@@ -40,8 +40,7 @@ run_id = str(uuid.uuid4())
 log.info("RUN_ID=%s", run_id)
 
 MAX_HOSTS: int = CONFIG.get("run", {}).get("max_hosts", 999)
-DRAIN_WINDOW: float = 5.0        # seconds to batch events — catches fast command bursts
-MIN_TURN_INTERVAL: float = 10.0  # minimum seconds between agent turns
+DRAIN_WINDOW: float = 1.0        # seconds to batch events — catches fast command bursts
 SKILLS_DIR = "/app/skills"
 LOG_DIR = Path(CONFIG.get("run", {}).get("log_dir", "/runs")) / run_id
 
@@ -291,12 +290,7 @@ async def agent_loop() -> None:
                 for ev in extra:
                     await event_queue.put(ev)
         else:
-            # Successful turn — enforce minimum inter-turn gap so the rate limit
-            # window has time to refresh before the next burst of LLM calls.
-            inter_turn_wait = max(0.0, MIN_TURN_INTERVAL - turn_elapsed)
-            if inter_turn_wait > 0:
-                log.debug("inter-turn throttle: %.1fs", inter_turn_wait)
-                await asyncio.sleep(inter_turn_wait)
+            pass  # no inter-turn throttle — process next batch immediately
 
         # M-09: log milestone once when all hosts are done
         if world.propagation_complete(MAX_HOSTS) and not propagation_logged:

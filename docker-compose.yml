@@ -46,7 +46,7 @@ services:
         ipv4_address: 172.20.0.11
     environment:
       C2_HOST: "172.20.0.2"
-      BEACON_INTERVAL: "5"
+      BEACON_INTERVAL: "2"
       DBA_USER: "alice"
       SSH_PASS: "lab-shared-pass"
       CRED_LOCATION: "env"

