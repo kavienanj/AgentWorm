@@ -1,21 +1,59 @@
-llm:
-  # DigitalOcean Inference — OpenAI-compatible endpoint
-  # Available models: https://inference.do-ai.run/v1/models
-  # Swap model: to any DO-hosted model for the model-size sweep experiment
-  model: openai-gpt-oss-120b        # fallback if LLM_MODEL env var is not set
-  api_base: https://inference.do-ai.run/v1
-  api_key_env: DIGITALOCEAN_TOKEN               # set in .env
-  max_tokens: 2048
+# ─────────────────────────────────────────────────────────────────────────────
+# AgentWorm LLM configuration
+#
+# provider options:
+#   openai            → OpenAI API (GPT-4o, o3, etc.)
+#   anthropic         → Anthropic API (Claude Sonnet, Opus, etc.)
+#   openai_compatible → Any OpenAI-compatible endpoint (DO Inference, Ollama…)
+#
+# To switch provider: change `provider` and the matching block below.
+# To override model at runtime without rebuild:  LLM_MODEL=<name> docker compose up
+# ─────────────────────────────────────────────────────────────────────────────
 
-  # --- Swap model for the size-sweep experiment (change LLM_MODEL in .env) ---
-  # meta-llama/Meta-Llama-3.1-8B-Instruct
-  # meta-llama/Meta-Llama-3.3-70B-Instruct
-  # mistral-7b-instruct
+llm:
+
+  # ── Active provider ─────────────────────────────────────────────────────────
+  provider: openai
+
+  # ── OpenAI ──────────────────────────────────────────────────────────────────
+  # pip package: langchain-openai (already in requirements.txt)
+  # API key env: OPENAI_API_KEY  (set in .env)
+  model: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+  max_tokens: 4096
+  min_call_interval: 0.5   # OpenAI Tier-1 allows ~500 RPM — 0.5s is plenty
+
+  # ── Anthropic Claude ────────────────────────────────────────────────────────
+  # Uncomment this block and set provider: anthropic to use Claude.
+  # pip package: langchain-anthropic (in requirements.txt)
+  # API key env: ANTHROPIC_API_KEY  (set in .env)
   #
-  # Ollama local (add ollama container to compose, point api_base to it):
-  #   api_base: http://ollama:11434/v1
-  #   api_key_env: ""   # Ollama needs no key
+  # provider: anthropic
+  # model: claude-sonnet-4-6
+  # api_key_env: ANTHROPIC_API_KEY
+  # max_tokens: 4096
+  # min_call_interval: 0.5
+
+  # ── DigitalOcean Inference (OpenAI-compatible) ───────────────────────────────
+  # Uncomment this block and set provider: openai_compatible to use DO Inference.
+  # pip package: langchain-openai (already in requirements.txt)
+  # API key env: DIGITALOCEAN_TOKEN  (set in .env)
+  #
+  # provider: openai_compatible
+  # model: gemma-4-31B-it
+  # api_base: https://inference.do-ai.run/v1
+  # api_key_env: DIGITALOCEAN_TOKEN
+  # max_tokens: 4096
+  # min_call_interval: 3.0   # DO Inference ~20 RPM
+
+  # ── Ollama (local, OpenAI-compatible) ───────────────────────────────────────
+  # provider: openai_compatible
+  # model: llama3.1:8b
+  # api_base: http://ollama:11434/v1
+  # api_key_env: ""            # Ollama needs no key
+  # max_tokens: 4096
+  # min_call_interval: 0.2
 
 run:
   log_dir: /runs
-  max_hosts: 3   # sprint 6: seed + fileserver + webapp (M-09)
+  max_hosts: 3

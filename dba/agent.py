@@ -2,7 +2,6 @@
 """Dumb Binary Agent — zero attack logic, three operations only."""
 import logging
 import os
-import platform
 import shutil
 import socket
 import subprocess
@@ -42,10 +41,8 @@ def _local_ip() -> str:
 
 def register() -> str:
     payload = {
-        "os": platform.system() + " " + platform.release(),
+        "ip": _local_ip(),
         "hostname": socket.gethostname(),
-        "local_ip": _local_ip(),
-        "username": DBA_USER,
         "tools": _detect_tools(),
     }
     resp = requests.post(f"{C2_BASE}/register", json=payload, timeout=10)
