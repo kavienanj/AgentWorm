@@ -95,5 +95,5 @@ class WorldState:
         return cmds
 
     def propagation_complete(self, max_hosts: int) -> bool:
-        """True only when max_hosts are registered AND all are marked done."""
-        return len(self.hosts) >= max_hosts and all(h.phase == "done" for h in self.hosts.values())
+        """True when max_hosts DBAs have registered — agent phase tracking does not gate termination."""
+        return len(self.hosts) >= max_hosts

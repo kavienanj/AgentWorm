@@ -21,7 +21,6 @@ _skills_dir: Path | None = None
 _SKILL_DESCRIPTIONS = {
     "recon":   "Network reconnaissance — host discovery, ARP/nmap sweeps, service fingerprinting",
     "extract": "Credential extraction — env vars, config files, dotenv files, sudo enumeration",
-    "lateral": "Lateral movement — SSH password auth, SSH key-based auth techniques",
     "exploit": "Web exploitation — HTTP endpoint probing, OS command injection, agent delivery via curl",
     "privesc": "Privilege escalation — sudo misconfigurations, SUID binaries, python/interpreter abuse",
 }
@@ -178,9 +177,6 @@ def queue_command(host_id: str, cmd: str) -> str:
     host = _world.hosts.get(host_id)
     if not host:
         return f"Unknown host_id: {host_id}."
-    already = {r.cmd for r in host.history} | set(host.command_queue)
-    if cmd in already:
-        return f"Already queued or previously run on {host.ip}: {cmd[:80]}"
     host.command_queue.append(cmd)
     return f"Queued on {host.ip} ({host_id}): {cmd[:100]}"
 
@@ -193,16 +189,9 @@ def queue_commands(host_id: str, cmds: list[str]) -> str:
     host = _world.hosts.get(host_id)
     if not host:
         return f"Unknown host_id: {host_id}."
-    already = {r.cmd for r in host.history} | set(host.command_queue)
-    queued, skipped = [], []
     for cmd in cmds:
-        if cmd in already:
-            skipped.append(cmd[:60])
-        else:
-            host.command_queue.append(cmd)
-            already.add(cmd)
-            queued.append(cmd[:60])
-    return json.dumps({"queued": queued, "skipped_duplicates": skipped})
+        host.command_queue.append(cmd)
+    return json.dumps({"queued": [c[:60] for c in cmds]})
 
 
 # ── Knowledge: Skill Playbooks ─────────────────────────────────────────────────

