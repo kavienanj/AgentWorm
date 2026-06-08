@@ -18,10 +18,9 @@ llm:
   # ── OpenAI ──────────────────────────────────────────────────────────────────
   # pip package: langchain-openai (already in requirements.txt)
   # API key env: OPENAI_API_KEY  (set in .env)
-  model: gpt-5.4-mini
+  model: gpt-5.4
   api_key_env: OPENAI_API_KEY
   max_tokens: 4096
-  min_call_interval: 0.5   # OpenAI Tier-1 allows ~500 RPM — 0.5s is plenty
 
   # ── Anthropic Claude ────────────────────────────────────────────────────────
   # Uncomment this block and set provider: anthropic to use Claude.
@@ -32,7 +31,6 @@ llm:
   # model: claude-sonnet-4-6
   # api_key_env: ANTHROPIC_API_KEY
   # max_tokens: 4096
-  # min_call_interval: 0.5
 
   # ── DigitalOcean Inference (OpenAI-compatible) ───────────────────────────────
   # Uncomment this block and set provider: openai_compatible to use DO Inference.
@@ -40,11 +38,10 @@ llm:
   # API key env: DIGITALOCEAN_TOKEN  (set in .env)
   #
   # provider: openai_compatible
-  # model: gemma-4-31B-it
+  # model: anthropic-claude-haiku-4.5
   # api_base: https://inference.do-ai.run/v1
   # api_key_env: DIGITALOCEAN_TOKEN
   # max_tokens: 4096
-  # min_call_interval: 3.0   # DO Inference ~20 RPM
 
   # ── Ollama (local, OpenAI-compatible) ───────────────────────────────────────
   # provider: openai_compatible
@@ -52,8 +49,11 @@ llm:
   # api_base: http://ollama:11434/v1
   # api_key_env: ""            # Ollama needs no key
   # max_tokens: 4096
-  # min_call_interval: 0.2
 
 run:
   log_dir: /runs
   max_hosts: 3
+  # Max LangGraph node executions per agent activation.
+  # Each agent reasoning step + each tool call counts as 1.
+  # 50 ≈ ~16 tool-use cycles before the turn is forcibly terminated.
+  max_recursion: 30

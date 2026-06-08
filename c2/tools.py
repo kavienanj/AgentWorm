@@ -18,14 +18,6 @@ from world import CredRecord, WorldState
 _world: WorldState | None = None
 _skills_dir: Path | None = None
 
-_SKILL_DESCRIPTIONS = {
-    "recon":   "Network reconnaissance — host discovery, ARP/nmap sweeps, service fingerprinting",
-    "extract": "Credential extraction — env vars, config files, dotenv files, sudo enumeration",
-    "exploit": "Web exploitation — HTTP endpoint probing, OS command injection, agent delivery via curl",
-    "privesc": "Privilege escalation — sudo misconfigurations, SUID binaries, python/interpreter abuse",
-}
-
-
 def configure(world: WorldState, skills_dir: str) -> None:
     global _world, _skills_dir
     _world = world
@@ -36,35 +28,36 @@ def configure(world: WorldState, skills_dir: str) -> None:
 
 @tool
 def get_host(host_id: str) -> str:
-    """Get full details for a host: phase, tools, discovered IPs, open ports, and recent command history."""
+    """Get full details for a registered host. Registered = DBA is running and checked in — you can dispatch commands to it."""
     host = _world.hosts.get(host_id)
     if not host:
         return f"Unknown host_id: {host_id}. Use list_hosts() to see valid IDs."
-    recent = host.history[-15:]
     return json.dumps({
         "host_id": host.host_id,
         "ip": host.ip,
         "hostname": host.hostname,
+        "registered": True,
         "tools": host.tools,
-        "phase": host.phase,
         "discovered_ips": host.discovered_ips,
         "open_ports": host.open_ports,
         "command_queue_length": len(host.command_queue),
-        "history": [
-            {
-                "cmd": r.cmd,
-                "issued_at": r.issued_at,
-                "returned": r.result is not None,
-                "result_preview": (r.result or "")[:300] if r.result else None,
-            }
-            for r in recent
-        ],
+        # history temporarily disabled — agent must rely on live recon
+        # recent = host.history[-15:]
+        # "history": [
+        #     {
+        #         "cmd": r.cmd,
+        #         "issued_at": r.issued_at,
+        #         "returned": r.result is not None,
+        #         "result_preview": (r.result or "")[:300] if r.result else None,
+        #     }
+        #     for r in recent
+        # ],
     }, indent=2)
 
 
 @tool
 def list_hosts() -> str:
-    """List all known hosts with their current infection phase and key attributes."""
+    """List all registered hosts. Registered = DBA is running and checked in — you can dispatch commands to them. Use discovered_ips within each entry to find unregistered targets to compromise next."""
     if not _world.hosts:
         return "No hosts registered yet."
     return json.dumps([
@@ -72,7 +65,7 @@ def list_hosts() -> str:
             "host_id": h.host_id,
             "ip": h.ip,
             "hostname": h.hostname,
-            "phase": h.phase,
+            "registered": True,
             "tools": h.tools,
             "discovered_ips": h.discovered_ips,
             "credentials_found": sum(1 for c in _world.credentials if c.source_host_id == h.host_id),
@@ -105,23 +98,6 @@ def read_note(key: str) -> str:
 
 
 # ── Write: World State ─────────────────────────────────────────────────────────
-
-@tool
-def mark_phase(host_id: str, phase: str) -> str:
-    """
-    Update the infection phase for a host.
-    Valid phases: new, recon, extract, lateral, done.
-    Call with phase='done' when a host is fully exploited and no further action needed from it.
-    """
-    host = _world.hosts.get(host_id)
-    if not host:
-        return f"Unknown host_id: {host_id}."
-    valid = {"new", "recon", "extract", "lateral", "done"}
-    if phase not in valid:
-        return f"Invalid phase '{phase}'. Valid values: {sorted(valid)}"
-    host.phase = phase
-    return f"Phase for {host_id} ({host.ip}) → '{phase}'."
-
 
 @tool
 def store_credential(host_id: str, key: str, value: str, notes: str = "") -> str:
@@ -172,16 +148,6 @@ def write_note(key: str, value: str) -> str:
 # ── Action: Control Hosts ──────────────────────────────────────────────────────
 
 @tool
-def queue_command(host_id: str, cmd: str) -> str:
-    """Queue a single shell command for execution on an infected host."""
-    host = _world.hosts.get(host_id)
-    if not host:
-        return f"Unknown host_id: {host_id}."
-    host.command_queue.append(cmd)
-    return f"Queued on {host.ip} ({host_id}): {cmd[:100]}"
-
-
-@tool
 def queue_commands(host_id: str, cmds: list[str]) -> str:
     """Queue multiple shell commands (max 5) for execution on an infected host."""
     if len(cmds) > 5:
@@ -191,33 +157,20 @@ def queue_commands(host_id: str, cmds: list[str]) -> str:
         return f"Unknown host_id: {host_id}."
     for cmd in cmds:
         host.command_queue.append(cmd)
-    return json.dumps({"queued": [c[:60] for c in cmds]})
+    return json.dumps({"host": host.ip, "hostname": host.hostname, "queued": [c[:60] for c in cmds]})
 
 
 # ── Knowledge: Skill Playbooks ─────────────────────────────────────────────────
 
 @tool
-def list_skills() -> str:
-    """List all available skill playbooks with one-line descriptions."""
-    available = {
-        name: desc
-        for name, desc in _SKILL_DESCRIPTIONS.items()
-        if (_skills_dir / f"{name}.md").exists()
-    }
-    if not available:
-        return "No skills available."
-    return json.dumps(available, indent=2)
-
-
-@tool
 def read_skill(name: str) -> str:
     """
     Read a skill playbook by name. Returns the full technique guide.
-    Use list_skills() first to see what is available.
+    Available: recon, extract, exploit, privesc.
     """
     path = _skills_dir / f"{name}.md"
     if not path.exists():
-        available = [n for n in _SKILL_DESCRIPTIONS if (_skills_dir / f"{n}.md").exists()]
+        available = [p.stem for p in _skills_dir.glob("*.md") if p.stem != "system"]
         return f"Skill '{name}' not found. Available: {available}"
     return path.read_text().strip()
 
@@ -234,15 +187,12 @@ ALL_TOOLS = [
     list_credentials,
     read_note,
     # Write
-    mark_phase,
     store_credential,
     store_open_ports,
     add_discovered_ip,
     write_note,
     # Action
-    queue_command,
     queue_commands,
     # Knowledge
-    list_skills,
     read_skill,
 ]

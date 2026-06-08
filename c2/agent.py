@@ -1,7 +1,7 @@
 """
 LangGraph agent — the C2 brain.
 
-Single persistent conversation thread across the entire run.
+Fresh conversation context per agent activation; no checkpointer.
 The agent receives events, calls tools, and drives all propagation decisions.
 
 Supported providers (set via configs/llm.yaml → llm.provider):
@@ -11,17 +11,14 @@ Supported providers (set via configs/llm.yaml → llm.provider):
 """
 from __future__ import annotations
 
-import asyncio
 import os
-import time
 import uuid
 from pathlib import Path
 from typing import Annotated
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
@@ -87,33 +84,29 @@ def _build_llm(llm_cfg: dict) -> BaseChatModel:
         )
 
 
-def build_agent(llm_cfg: dict, skills_dir: str, max_hosts: int) -> tuple:
+def build_agent(llm_cfg: dict, skills_dir: str, max_hosts: int, c2_ips: str = ""):
     """
-    Build and return (compiled_graph, system_message).
+    Build and return the compiled LangGraph app.
 
-    The compiled graph uses MemorySaver so the full conversation history persists
-    across all invocations for a given thread_id (= run_id).
+    No checkpointer — every invocation starts with a fresh message list.
+    Persistent state lives entirely in WorldState, accessed via tool calls.
+    The recursion_limit passed at invocation time caps within-turn tool loops.
     """
-    min_interval: float = llm_cfg.get("min_call_interval", 1.0)
-    _last_call: list[float] = [0.0]  # mutable closure cell for rate limiting
-
     llm = _build_llm(llm_cfg)
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
     # System message loaded once; prepended to every LLM call.
     system_path = Path(skills_dir) / "system.md"
     system_content = system_path.read_text().strip()
+    c2_ip = c2_ips.split(",")[0].strip() if c2_ips else "unknown"
+    parts = c2_ip.split(".")
+    gateway_ip = ".".join(parts[:-1] + ["1"]) if len(parts) == 4 else "unknown"
+    system_content = system_content.replace("{{C2_IP}}", c2_ip)
+    system_content = system_content.replace("{{GATEWAY_IP}}", gateway_ip)
     system_content += f"\n\n## Lab Context\nThis testbed contains at most {max_hosts} hosts total."
     system_message = SystemMessage(content=system_content)
 
     async def call_model(state: AgentState) -> dict:
-        # Proactive rate limiting — enforces minimum gap between API calls.
-        now = time.monotonic()
-        wait = min_interval - (now - _last_call[0])
-        if wait > 0:
-            await asyncio.sleep(wait)
-        _last_call[0] = time.monotonic()
-
         messages = [system_message] + list(state["messages"])
         response = await llm_with_tools.ainvoke(messages)
 
@@ -136,11 +129,8 @@ def build_agent(llm_cfg: dict, skills_dir: str, max_hosts: int) -> tuple:
     graph = StateGraph(AgentState)
     graph.add_node("agent", call_model)
     graph.add_node("tools", ToolNode(ALL_TOOLS))
-    graph.set_entry_point("agent")
+    graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
     graph.add_edge("tools", "agent")
 
-    checkpointer = MemorySaver()
-    agent_app = graph.compile(checkpointer=checkpointer)
-
-    return agent_app, system_message
+    return graph.compile()

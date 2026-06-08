@@ -40,7 +40,6 @@ class HostRecord:
     hostname: str
     tools: list[str]
     registered_at: str
-    phase: str = "new"                         # new → recon → extract → lateral → done
     command_queue: list[str] = field(default_factory=list)
     history: list[CommandRecord] = field(default_factory=list)
     discovered_ips: list[str] = field(default_factory=list)
@@ -53,7 +52,6 @@ class WorldState:
     hosts: dict[str, HostRecord] = field(default_factory=dict)
     credentials: list[CredRecord] = field(default_factory=list)
     notes: dict[str, str] = field(default_factory=dict)
-    killed: bool = False
 
     def register_host(self, ip: str, hostname: str, tools: list[str]) -> tuple[bool, HostRecord]:
         """Idempotent on IP. Returns (is_new, host)."""
@@ -95,5 +93,5 @@ class WorldState:
         return cmds
 
     def propagation_complete(self, max_hosts: int) -> bool:
-        """True when max_hosts DBAs have registered — agent phase tracking does not gate termination."""
+        """True when max_hosts DBAs have registered."""
         return len(self.hosts) >= max_hosts
