@@ -8,6 +8,7 @@ Supported providers (set via configs/llm.yaml → llm.provider):
   openai            — OpenAI API  (ChatOpenAI, langchain-openai)
   anthropic         — Anthropic Claude  (ChatAnthropic, langchain-anthropic)
   openai_compatible — Any OpenAI-compatible endpoint: DO Inference, Ollama, etc.
+  openrouter        — OpenRouter multi-provider gateway  (ChatOpenRouter, langchain-openrouter)
 """
 from __future__ import annotations
 
@@ -77,10 +78,20 @@ def _build_llm(llm_cfg: dict) -> BaseChatModel:
             temperature=0,
         )
 
+    elif provider == "openrouter":
+        from langchain_openrouter import ChatOpenRouter
+        return ChatOpenRouter(
+            model=model_name,
+            api_key=api_key or None,
+            max_tokens=max_tokens,
+            max_retries=max_retries,
+            temperature=0,
+        )
+
     else:
         raise ValueError(
             f"Unknown llm.provider '{provider}'. "
-            "Valid values: openai | anthropic | openai_compatible"
+            "Valid values: openai | anthropic | openai_compatible | openrouter"
         )
 
 

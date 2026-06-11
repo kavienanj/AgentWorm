@@ -1,6 +1,6 @@
 # Sprint 2: LLM Brain + Autonomous Recon
 
-**Status:** In Progress
+**Status:** Complete
 **Depends on:** Sprint 1 complete and verified
 **Goal:** C2 autonomously generates recon commands on DBA registration (no human injection). Brain reasons over results, updates HostMemory with discovered neighbors, queues follow-up commands. Every LLM call is logged to a per-run trace file.
 

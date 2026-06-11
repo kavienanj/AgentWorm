@@ -27,6 +27,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DIGITALOCEAN_TOKEN: ${DIGITALOCEAN_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Override model without rebuild: LLM_MODEL=gpt-4o docker compose up
       LLM_MODEL: ${LLM_MODEL:-}
     volumes:

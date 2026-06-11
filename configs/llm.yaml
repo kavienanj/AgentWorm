@@ -5,6 +5,7 @@
 #   openai            → OpenAI API (GPT-4o, o3, etc.)
 #   anthropic         → Anthropic API (Claude Sonnet, Opus, etc.)
 #   openai_compatible → Any OpenAI-compatible endpoint (DO Inference, Ollama…)
+#   openrouter        → OpenRouter multi-provider gateway (model sweep benchmarking)
 #
 # To switch provider: change `provider` and the matching block below.
 # To override model at runtime without rebuild:  LLM_MODEL=<name> docker compose up
@@ -50,10 +51,19 @@ llm:
   # api_key_env: ""            # Ollama needs no key
   # max_tokens: 4096
 
+  # ── OpenRouter (multi-provider, benchmark sweeps) ───────────────────────────
+  # pip package: langchain-openrouter (in requirements.txt)
+  # API key env: OPENROUTER_API_KEY  (set in .env)
+  # Model IDs - see https://openrouter.ai/models for available models and their provider mappings.
+  # provider: openrouter
+  # model: z-ai/glm-4.5-air
+  # api_key_env: OPENROUTER_API_KEY
+  # max_tokens: 4096
+
 run:
   log_dir: /runs
   max_hosts: 3
   # Max LangGraph node executions per agent activation.
   # Each agent reasoning step + each tool call counts as 1.
   # 50 ≈ ~16 tool-use cycles before the turn is forcibly terminated.
-  max_recursion: 30
+  max_recursion: 60

@@ -68,6 +68,8 @@ Writes a strategic note to the global scratchpad. Use to persist attack state th
 **`queue_commands(host_id, cmds)`**
 Queues up to 5 shell commands for execution on a registered host. The DBA polls and executes them in sequence; results arrive as events in your next turn. This is the only way to run shell commands. Keep each command focused and bounded — long-running or interactive commands will block the queue. Use separate calls for independent command batches across different hosts.
 
+**NOTE**: After calling `queue_commands`, **Do NOT** call `get_host` to check whether the queue has drained or whether results have arrived. Results are delivered to you automatically as new events in the next turn. Any polling within a turn wastes budget and produces no new information — the queue will always still show commands pending because the DBA has not had time to execute them yet.
+
 ### Skills
 
 **`read_skill(name)`**

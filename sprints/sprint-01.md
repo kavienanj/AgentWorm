@@ -1,6 +1,6 @@
 # Sprint 1: Bare-Bones Pipeline (No LLM)
 
-**Status:** In Progress
+**Status:** Complete
 **Goal:** Working end-to-end pipeline — DBA registers with C2, human injects a command, DBA executes and returns results. No LLM. Validates the full communication skeleton.
 
 ---

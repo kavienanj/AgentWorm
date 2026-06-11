@@ -1,6 +1,6 @@
 # Sprint 4: Lateral Movement via SSH (M-05, M-06 partial)
 
-**Status:** In Progress
+**Status:** Complete
 **Depends on:** Sprint 3 complete and verified
 **Goal:** After recon + extraction complete, the C2 brain autonomously deploys the DBA binary onto a newly discovered host via SSH using cross-host credentials. The new host registers with C2 and starts its own kill chain cycle.
 

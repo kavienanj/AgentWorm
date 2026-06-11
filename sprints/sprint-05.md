@@ -1,6 +1,6 @@
 # Sprint 5: Multi-Subnet Pivoting + Termination + Metrics (M-08, M-09)
 
-**Status:** In Progress
+**Status:** Complete (superseded by EXPLOIT_CHAIN.md — subnet_b/pivot design replaced by flat-subnet exploit chain)
 **Depends on:** Sprint 4 complete and verified
 **Goal:** Add a second subnet with a dual-homed pivot host and two unreachable targets. Brain uses the pivot as a relay to infect subnet-B hosts (M-08). Add max_hosts termination (M-09), a /metrics endpoint, and a /export endpoint.
 
