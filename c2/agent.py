@@ -109,7 +109,7 @@ def build_agent(llm_cfg: dict, skills_dir: str, max_hosts: int, c2_ips: str = ""
     # System message loaded once; prepended to every LLM call.
     system_path = Path(skills_dir) / "system.md"
     system_content = system_path.read_text().strip()
-    c2_ip = c2_ips.split(",")[0].strip() if c2_ips else "unknown"
+    c2_ip = c2_ips.split()[0].strip() if c2_ips else "unknown"
     parts = c2_ip.split(".")
     gateway_ip = ".".join(parts[:-1] + ["1"]) if len(parts) == 4 else "unknown"
     system_content = system_content.replace("{{C2_IP}}", c2_ip)

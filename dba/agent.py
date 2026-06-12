@@ -3,12 +3,16 @@
 import logging
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import time
 
 import requests
+
+# Clean exit on SIGTERM so `systemctl stop` doesn't leave a zombie (DO systemd).
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("dba")
