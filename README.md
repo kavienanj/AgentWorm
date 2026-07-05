@@ -19,7 +19,7 @@ The repository includes several design and planning documents that explain the s
 - [PLAN.md](PLAN.md) — captures the overall implementation plan, milestones, and project direction.
 - [EXPLOIT_CHAIN.md](EXPLOIT_CHAIN.md) — outlines the exploit-chain research design and the multi-hop propagation scenarios being studied.
 - [DO_EXPLOIT_CHAIN.md](DO_EXPLOIT_CHAIN.md) — documents the DigitalOcean-based testbed design and its final topology.
-- [CLAUDE.md](CLAUDE.md) — contains repository-specific guidance for local development and operational workflows.
+- [CLAUDE.md](CLAUDE.md) — contains knowledge for agentic development (Claude Code, Copilot, etc.)
 
 ## License
 
