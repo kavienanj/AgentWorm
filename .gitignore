@@ -8,3 +8,5 @@ runs/*/
 # Python
 __pycache__/
 *.pyc
+
+logs/
